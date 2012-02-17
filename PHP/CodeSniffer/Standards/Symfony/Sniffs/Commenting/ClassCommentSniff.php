@@ -19,11 +19,6 @@ if (class_exists('PHP_CodeSniffer_CommentParser_ClassCommentParser', true) === f
     throw new PHP_CodeSniffer_Exception($error);
 }
 
-if (class_exists('Symfony_Sniffs_Commenting_FileCommentSniff', true) === false) {
-    $error = 'Class PEAR_Sniffs_Commenting_FileCommentSniff not found';
-    throw new PHP_CodeSniffer_Exception($error);
-}
-
 /**
  * Parses and verifies the doc comments for classes.
  *
@@ -47,8 +42,70 @@ if (class_exists('Symfony_Sniffs_Commenting_FileCommentSniff', true) === false) 
  * @version   Release: 1.3.0
  * @link      http://pear.php.net/package/PHP_CodeSniffer
  */
-class Symfony_Sniffs_Commenting_ClassCommentSniff extends PEAR_Sniffs_Commenting_FileCommentSniff
+class Symfony_Sniffs_Commenting_ClassCommentSniff implements PHP_CodeSniffer_Sniff
 {
+    /**
+     * Tags in correct order and related info.
+     *
+     * @var array
+     */
+    protected $tags = array(
+                       'category' => array(
+                                        'required' => false,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'precedes @package',
+                                       ),
+                       'package' => array(
+                                        'required' => true,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'follows @category',
+                                       ),
+                       'subpackage' => array(
+                                        'required' => false,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'follows @package',
+                                       ),
+                       'author' => array(
+                                        'required' => true,
+                                        'allow_multiple' => true,
+                                        'order_text' => 'follows @subpackage (if used) or @package',
+                                       ),
+                       'copyright' => array(
+                                        'required' => false,
+                                        'allow_multiple' => true,
+                                        'order_text' => 'follows @author',
+                                       ),
+                       'license' => array(
+                                        'required' => false,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'follows @copyright (if used) or @author',
+                                       ),
+                       'version' => array(
+                                        'required' => false,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'follows @license',
+                                       ),
+                       'link' => array(
+                                        'required' => false,
+                                        'allow_multiple' => true,
+                                        'order_text' => 'follows @version',
+                                       ),
+                       'see' => array(
+                                        'required' => false,
+                                        'allow_multiple' => true,
+                                        'order_text' => 'follows @link',
+                                       ),
+                       'since' => array(
+                                        'required' => false,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'follows @see (if used) or @link',
+                                       ),
+                       'deprecated' => array(
+                                        'required' => false,
+                                        'allow_multiple' => false,
+                                        'order_text' => 'follows @since (if used) or @see (if used) or @link',
+                                       ),
+                );
 
 
     /**
@@ -219,12 +276,203 @@ class Symfony_Sniffs_Commenting_ClassCommentSniff extends PEAR_Sniffs_Commenting
             if (empty($content) === true) {
                 $error = 'Content missing for @version tag in doc comment';
                 $this->currentFile->addWarning($error, $errorPos, 'EmptyVersion');
-            } 
+            }
         }
 
     }//end processVersion()
 
+    /**
+* Processes each required or optional tag.
+*
+* @param int $commentStart Position in the stack where the comment started.
+* @param int $commentEnd Position in the stack where the comment ended.
+*
+* @return void
+*/
+    protected function processTags($commentStart, $commentEnd)
+    {
+        $docBlock = (get_class($this) === 'Symfony_Sniffs_Commenting_FileCommentSniff') ? 'file' : 'class';
+        $foundTags = $this->commentParser->getTagOrders();
+        $orderIndex = 0;
+        $indentation = array();
+        $longestTag = 0;
+        $errorPos = 0;
 
+        foreach ($this->tags as $tag => $info) {
+
+            // Required tag missing.
+            if ($info['required'] === true && in_array($tag, $foundTags) === false) {
+                $error = 'Missing @%s tag in %s comment';
+                $data = array(
+                              $tag,
+                              $docBlock,
+                             );
+                $this->currentFile->addError($error, $commentEnd, 'MissingTag', $data);
+                continue;
+            }
+
+             // Get the line number for current tag.
+            $tagName = ucfirst($tag);
+            if ($info['allow_multiple'] === true) {
+                $tagName .= 's';
+            }
+
+            $getMethod = 'get'.$tagName;
+            $tagElement = $this->commentParser->$getMethod();
+            if (is_null($tagElement) === true || empty($tagElement) === true) {
+                continue;
+            }
+
+            $errorPos = $commentStart;
+            if (is_array($tagElement) === false) {
+                $errorPos = ($commentStart + $tagElement->getLine());
+            }
+
+            // Get the tag order.
+            $foundIndexes = array_keys($foundTags, $tag);
+
+            if (count($foundIndexes) > 1) {
+                // Multiple occurance not allowed.
+                if ($info['allow_multiple'] === false) {
+                    $error = 'Only 1 @%s tag is allowed in a %s comment';
+                    $data = array(
+                              $tag,
+                              $docBlock,
+                             );
+                    $this->currentFile->addError($error, $errorPos, 'DuplicateTag', $data);
+                } else {
+                    // Make sure same tags are grouped together.
+                    $i = 0;
+                    $count = $foundIndexes[0];
+                    foreach ($foundIndexes as $index) {
+                        if ($index !== $count) {
+                            $errorPosIndex
+                                = ($errorPos + $tagElement[$i]->getLine());
+                            $error = '@%s tags must be grouped together';
+                            $data = array($tag);
+                            $this->currentFile->addError($error, $errorPosIndex, 'TagsNotGrouped', $data);
+                        }
+
+                        $i++;
+                        $count++;
+                    }
+                }
+            }//end if
+
+            // Check tag order.
+            if ($foundIndexes[0] > $orderIndex) {
+                $orderIndex = $foundIndexes[0];
+            } else {
+                if (is_array($tagElement) === true && empty($tagElement) === false) {
+                    $errorPos += $tagElement[0]->getLine();
+                }
+
+                $error = 'The @%s tag is in the wrong order; the tag %s';
+                $data = array(
+                          $tag,
+                          $info['order_text'],
+                         );
+                $this->currentFile->addError($error, $errorPos, 'WrongTagOrder', $data);
+            }
+
+            // Store the indentation for checking.
+            $len = strlen($tag);
+            if ($len > $longestTag) {
+                $longestTag = $len;
+            }
+
+            if (is_array($tagElement) === true) {
+                foreach ($tagElement as $key => $element) {
+                    $indentation[] = array(
+                                      'tag' => $tag,
+                                      'space' => $this->getIndentation($tag, $element),
+                                      'line' => $element->getLine(),
+                                     );
+                }
+            } else {
+                $indentation[] = array(
+                                  'tag' => $tag,
+                                  'space' => $this->getIndentation($tag, $tagElement),
+                                 );
+            }
+
+            $method = 'process'.$tagName;
+            if (method_exists($this, $method) === true) {
+                // Process each tag if a method is defined.
+                call_user_func(array($this, $method), $errorPos);
+            } else {
+                if (is_array($tagElement) === true) {
+                    foreach ($tagElement as $key => $element) {
+                        $element->process(
+                            $this->currentFile,
+                            $commentStart,
+                            $docBlock
+                        );
+                    }
+                } else {
+                     $tagElement->process(
+                         $this->currentFile,
+                         $commentStart,
+                         $docBlock
+                     );
+                }
+            }
+        }//end foreach
+
+        foreach ($indentation as $indentInfo) {
+            if ($indentInfo['space'] !== 0
+                && $indentInfo['space'] !== ($longestTag + 1)
+            ) {
+                $expected = (($longestTag - strlen($indentInfo['tag'])) + 1);
+                $space = ($indentInfo['space'] - strlen($indentInfo['tag']));
+                $error = '@%s tag comment indented incorrectly; expected %s spaces but found %s';
+                $data = array(
+                             $indentInfo['tag'],
+                             $expected,
+                             $space,
+                            );
+
+                $getTagMethod = 'get'.ucfirst($indentInfo['tag']);
+
+                if ($this->tags[$indentInfo['tag']]['allow_multiple'] === true) {
+                    $line = $indentInfo['line'];
+                } else {
+                    $tagElem = $this->commentParser->$getTagMethod();
+                    $line = $tagElem->getLine();
+                }
+
+                $this->currentFile->addError($error, ($commentStart + $line), 'TagIndent', $data);
+            }
+        }
+    }//end processTags()
+
+
+    /**
+     * Get the indentation information of each tag.
+     *
+     * @param string $tagName The name of the
+     * doc comment
+     * element.
+     * @param PHP_CodeSniffer_CommentParser_DocElement $tagElement The doc comment
+     * element.
+     *
+     * @return void
+     */
+    protected function getIndentation($tagName, $tagElement)
+    {
+        if ($tagElement instanceof PHP_CodeSniffer_CommentParser_SingleElement) {
+            if ($tagElement->getContent() !== '') {
+                return (strlen($tagName) + substr_count($tagElement->getWhitespaceBeforeContent(), ' '));
+            }
+        } else if ($tagElement instanceof PHP_CodeSniffer_CommentParser_PairElement) {
+            if ($tagElement->getValue() !== '') {
+                return (strlen($tagName) + substr_count($tagElement->getWhitespaceBeforeValue(), ' '));
+            }
+        }
+
+        return 0;
+
+    }//end getIndentation()
 }//end class
 
 ?>
