@@ -7,10 +7,20 @@
   <exclude-pattern>*/Base*</exclude-pattern>
   <exclude-pattern>/cache/*</exclude-pattern>
   <exclude-pattern>/log/*</exclude-pattern>
-  <!-- Tab indentation -->
-  <rule ref="Generic.WhiteSpace.DisallowTabIndent"/>
+  <exclude-pattern>*/vendor/*</exclude-pattern>
+  <exclude-pattern>*/migration/*</exclude-pattern>
+  <!-- Check lines endings -->
+  <rule ref="Generic.Files.LineEndings"/>
+  <!-- Max line length -->
+  <rule ref="Symfony.Files.LineLength"/>
   <!-- symfony uses 2 spaces to indent -->
   <rule ref="Symfony.WhiteSpace.ScopeIndent"/>
+  <!-- No space in function start -->
+  <rule ref="Squiz.WhiteSpace.FunctionOpeningBraceSpace.php"/>
+  <!-- No useless spaces or empty lines -->
+  <rule ref="Squiz.WhiteSpace.SuperfluousWhitespace"/>
+  <!-- No multiple spaces -->
+  <rule ref="Squiz.WhiteSpace.LanguageConstructSpacing"/>
   <!-- -->
   <rule ref="Generic.ControlStructures.InlineControlStructure"/>
   <!-- -->
@@ -21,6 +31,8 @@
   <rule ref="Generic.Functions.CallTimePassByReference"/>
   <!-- PHP constants should be lowercase -->
   <rule ref="Generic.PHP.LowerCaseConstant"/>
+  <!-- No short tags  -->
+  <rule ref="Generic.PHP.DisallowShortOpenTag"/>
   <!-- No spaces on square brackets -->
   <rule ref="Squiz.Arrays.ArrayBracketSpacing"/>
   <!-- Don't allow ELSEIF, just ELSE IF -->
@@ -37,4 +49,8 @@
   <rule ref="Squiz.Scope.MemberVarScope"/>
   <!-- Verifies that class members have scope modifiers -->
   <rule ref="Squiz.Scope.MethodScope"/>
+  <!-- Metrics (cyclomatic complexity) -->
+  <rule ref="Generic.Metrics.CyclomaticComplexity"/>
+  <!-- Metrics (nesting levels) -->
+  <rule ref="Generic.Metrics.NestingLevel"/>
 </ruleset>
